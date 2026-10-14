@@ -1,0 +1,624 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  Bell, 
+  CheckCircle2, 
+  Clock, 
+  Phone, 
+  Search, 
+  Calendar, 
+  AlertTriangle,
+  Check,
+  Truck,
+  LayoutGrid,
+  Table as TableIcon,
+  MessageSquare
+} from 'lucide-react';
+import DeliveryModal from './DeliveryModal';
+import { formatBillNo } from '../utils/billNumber';
+
+const STORE_PHONE = '+91 90432 29107 / +91 99524 17748';
+
+export default function RemindersPage({ bills = [], isDarkMode, onToggleStatus, onSendSMS, onToggleSMS }) {
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'delivered'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
+  const [selectedBillForDelivery, setSelectedBillForDelivery] = useState(null);
+  const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
+
+  const handleOpenDeliveryModal = (bill) => {
+    setSelectedBillForDelivery(bill);
+    setIsDeliveryModalOpen(true);
+  };
+
+  const { pendingBills, deliveredBills } = useMemo(() => {
+    const pending = [];
+    const delivered = [];
+    bills.forEach(b => {
+      if (!b) return;
+      if (b.deliveryStatus === 'Delivered') {
+        delivered.push(b);
+      } else {
+        pending.push(b);
+      }
+    });
+    return { pendingBills: pending, deliveredBills: delivered };
+  }, [bills]);
+
+  const currentTabBills = activeTab === 'pending' ? pendingBills : deliveredBills;
+
+  // Filter by search query with memoization
+  const filteredBills = useMemo(() => {
+    if (!searchQuery) return currentTabBills;
+    const q = searchQuery.toLowerCase().trim();
+    return currentTabBills.filter(bill => {
+      return (
+        (bill.customer?.name && bill.customer.name.toLowerCase().includes(q)) ||
+        (bill.customer?.phone && bill.customer.phone.includes(q)) ||
+        (bill.customer?.mrdNo && bill.customer.mrdNo.includes(q)) ||
+        (bill.customer?.drName && bill.customer.drName.toLowerCase().includes(q)) ||
+        (bill.billNo && (bill.billNo.toString().includes(q) || formatBillNo(bill.billNo).toLowerCase().includes(q)))
+      );
+    });
+  }, [currentTabBills, searchQuery]);
+
+  const getWhatsAppLink = (bill) => {
+    const rawPhone = bill.customer?.phone ? bill.customer.phone.replace(/\D/g, '') : '';
+    const phoneWithCountry = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+    const isDelivered = bill.deliveryStatus === 'Delivered';
+    const bNo = formatBillNo(bill.billNo);
+    const statusMsg = isDelivered 
+      ? `Your optical order (Bill #${bNo}) is delivered! Thank you for choosing Optics India.` 
+      : `Your optical order (Bill #${bNo}) is ready for pickup/delivery! Please visit us or contact ${STORE_PHONE}.`;
+    const msg = `Hello ${bill.customer?.name || 'Valued Customer'}, greetings from Optics India! ${statusMsg}`;
+    return `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`;
+  };
+
+  // Open WhatsApp and Auto-Mark as Sent
+  const handleSendWhatsApp = (e, bill) => {
+    e.preventDefault();
+    const link = getWhatsAppLink(bill);
+    window.open(link, '_blank', 'noopener,noreferrer');
+    if (onToggleSMS) {
+      onToggleSMS(bill, true);
+    } else if (onSendSMS) {
+      onSendSMS(bill);
+    }
+  };
+
+  const inputClass = isDarkMode ? 'glass-input-dark text-slate-100' : 'glass-input-light text-slate-900';
+
+  return (
+    <div className="w-full max-w-[1920px] mx-auto p-4 sm:p-6 space-y-6 animate-in fade-in duration-300">
+      {/* Header Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-[#0B2D5B]/15 dark:border-[#D4AF37]/20">
+        <div>
+          <h1 className={`text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-3 ${
+            isDarkMode ? 'text-white' : 'text-[#0B2D5B]'
+          }`}>
+            <span className="p-2.5 rounded-2xl bg-[#0B2D5B] text-[#D4AF37] border border-[#D4AF37]/40 shadow-lg shadow-[#0B2D5B]/20 flex items-center justify-center">
+              <Bell className="w-6 h-6 text-[#D4AF37]" />
+            </span>
+            Delivery & Customer Reminders
+          </h1>
+          <p className={`text-xs sm:text-sm mt-1 font-medium ${isDarkMode ? 'text-slate-400' : 'text-[#0B2D5B]/70'}`}>
+            Track pending & delivered customer optical orders, update delivery statuses, and dispatch SMS/WhatsApp notifications.
+          </p>
+        </div>
+
+        {/* Top Controls: Search Bar & View Mode Toggle */}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* View Switcher Toggle */}
+          <div className={`flex items-center p-1 rounded-xl border ${
+            isDarkMode ? 'bg-[#061833] border-[#0B2D5B]' : 'bg-[#0B2D5B]/5 border-[#0B2D5B]/15'
+          }`}>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-[#0B2D5B] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm'
+                  : 'text-slate-400 hover:text-[#0B2D5B] dark:hover:text-[#D4AF37]'
+              }`}
+              title="Table View (Desktop & Tablet)"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Table View</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-[#0B2D5B] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm'
+                  : 'text-slate-400 hover:text-[#0B2D5B] dark:hover:text-[#D4AF37]'
+              }`}
+              title="Card Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Card View</span>
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative flex-1 md:w-72 min-w-[200px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
+            <input
+              type="text"
+              placeholder="Search by customer, phone, doctor, bill #..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className={`w-full pl-9 pr-3 py-2 text-xs font-semibold rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#D4AF37] ${inputClass}`}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Status Tabs (2-Column Grid on Mobile) */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+        {/* Pending Tab */}
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center justify-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-lg active:scale-95 ${
+            activeTab === 'pending'
+              ? 'bg-gradient-to-r from-[#0B2D5B] to-[#143E77] text-[#D4AF37] shadow-[#0B2D5B]/30 ring-2 ring-[#D4AF37]/40 border border-[#D4AF37]/40'
+              : isDarkMode 
+                ? 'bg-[#061833]/80 border border-[#0B2D5B]/60 text-slate-400 hover:text-[#D4AF37]' 
+                : 'bg-white border border-[#0B2D5B]/15 text-[#0B2D5B] hover:bg-[#0B2D5B]/5'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-[#D4AF37]" />
+          <span className="truncate">Pending Deliveries</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-black shrink-0 ${
+            activeTab === 'pending'
+              ? 'bg-[#D4AF37] text-[#061833]'
+              : isDarkMode ? 'bg-[#0B2D5B] text-[#D4AF37]' : 'bg-[#0B2D5B]/10 text-[#0B2D5B]'
+          }`}>
+            {pendingBills.length}
+          </span>
+        </button>
+
+        {/* Delivered Tab */}
+        <button
+          onClick={() => setActiveTab('delivered')}
+          className={`flex items-center justify-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-lg active:scale-95 ${
+            activeTab === 'delivered'
+              ? 'bg-gradient-to-r from-[#0B2D5B] to-[#143E77] text-[#D4AF37] shadow-[#0B2D5B]/30 ring-2 ring-[#D4AF37]/40 border border-[#D4AF37]/40'
+              : isDarkMode 
+                ? 'bg-[#061833]/80 border border-[#0B2D5B]/60 text-slate-400 hover:text-[#D4AF37]' 
+                : 'bg-white border border-[#0B2D5B]/15 text-[#0B2D5B] hover:bg-[#0B2D5B]/5'
+          }`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-[#D4AF37]" />
+          <span className="truncate">Delivered Orders</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-black shrink-0 ${
+            activeTab === 'delivered'
+              ? 'bg-[#D4AF37] text-[#061833]'
+              : isDarkMode ? 'bg-[#0B2D5B] text-[#D4AF37]' : 'bg-[#0B2D5B]/10 text-[#0B2D5B]'
+          }`}>
+            {deliveredBills.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Main Content Area */}
+      {filteredBills.length === 0 ? (
+        <div className={`p-12 text-center rounded-3xl border ${
+          isDarkMode ? 'bg-slate-900/40 border-slate-800 text-slate-400' : 'bg-white/60 border-slate-200 text-slate-500'
+        }`}>
+          <Bell className="w-12 h-12 mx-auto mb-3 opacity-30 text-amber-500" />
+          <h3 className="text-lg font-bold">No customer orders in this category</h3>
+          <p className="text-xs mt-1">
+            {activeTab === 'pending' 
+              ? 'All customer orders have been marked as delivered!' 
+              : 'No orders are currently marked as delivered.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* 1. TABLE VIEW (For Desktop & Tablet >= md when Table View selected) */}
+          {(viewMode === 'table') && (
+            <div className={`hidden md:block rounded-2xl border shadow-xl overflow-hidden ${
+              isDarkMode ? 'bg-[#061833]/90 border-[#0B2D5B]' : 'bg-white border-[#0B2D5B]/20'
+            }`}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-xs border-collapse">
+                  <thead>
+                    <tr className={`border-b font-extrabold uppercase tracking-wider text-[11px] ${
+                      isDarkMode ? 'bg-[#0B2D5B]/85 text-[#D4AF37] border-[#0B2D5B]' : 'bg-[#0B2D5B]/10 text-[#0B2D5B] border-[#0B2D5B]/20'
+                    }`}>
+                      <th className="p-3 border-r border-slate-400/20 text-center">Bill #</th>
+                      <th className="p-3 border-r border-slate-400/20">Customer Details</th>
+                      <th className="p-3 border-r border-slate-400/20">Delivery Date</th>
+                      <th className="p-3 border-r border-slate-400/20">Lens Specification</th>
+                      <th className="p-3 border-r border-slate-400/20">Frame Specification</th>
+                      <th className="p-3 border-r border-slate-400/20">Doctor / Prescriber</th>
+                      <th className="p-3 border-r border-slate-400/20 text-right">Advance Amount</th>
+                      <th className="p-3 border-r border-slate-400/20 text-right">Net Bill / Balance</th>
+                      <th className="p-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y font-mono ${
+                    isDarkMode ? 'divide-[#0B2D5B]/40 text-slate-200' : 'divide-slate-200 text-slate-800'
+                  }`}>
+                    {filteredBills.map((bill) => {
+                      const billId = bill._id || bill.billNo;
+                      const isDelivered = bill.deliveryStatus === 'Delivered';
+                      const formattedDelivDate = bill.deliveryDate 
+                        ? new Date(bill.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+                        : (bill.date ? new Date(bill.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : 'N/A');
+
+                      const isOverdue = !isDelivered && bill.deliveryDate && bill.deliveryDate.substring(0, 10) < todayStr;
+
+                      return (
+                        <tr 
+                          key={billId}
+                          className={`transition-colors ${
+                            isDarkMode ? 'hover:bg-[#0B2D5B]/20' : 'hover:bg-[#0B2D5B]/5'
+                          }`}
+                        >
+                          {/* Bill # */}
+                          <td className="p-3 border-r border-slate-400/20 text-center">
+                            <span className="px-2.5 py-1 rounded-xl bg-[#0B2D5B]/15 dark:bg-[#0B2D5B]/50 border border-[#0B2D5B]/20 dark:border-[#D4AF37]/30 text-[#0B2D5B] dark:text-[#D4AF37] font-mono font-black text-xs">
+                              #{formatBillNo(bill.billNo)}
+                            </span>
+                          </td>
+
+                          {/* Customer Name, Phone, Age/Gender */}
+                          <td className="p-3 border-r border-slate-400/20 font-sans">
+                            <div className="font-black text-sm text-[#0B2D5B] dark:text-[#D4AF37]">{bill.customer?.name || 'Unnamed'}</div>
+                            <div className="flex items-center gap-1.5 text-xs text-[#0B2D5B] dark:text-[#D4AF37] font-mono font-bold mt-0.5">
+                              <Phone className="w-3 h-3 text-[#D4AF37]" />
+                              <span>{bill.customer?.phone || 'No Phone'}</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-semibold">
+                              {bill.customer?.age ? `${bill.customer.age} yrs` : ''} ({bill.customer?.gender || 'N/A'})
+                            </div>
+                          </td>
+
+                          {/* Delivery Date */}
+                          <td className="p-3 border-r border-slate-400/20 whitespace-nowrap">
+                            <div className="font-bold font-mono">{formattedDelivDate}</div>
+                            {isOverdue && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 border border-blue-300 text-blue-900 dark:bg-sky-950/50 dark:border-sky-800/60 dark:text-sky-300 text-[10px] font-bold mt-1">
+                                <AlertTriangle className="w-3 h-3 text-blue-800 dark:text-sky-300" /> OVERDUE
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Lens Specs */}
+                          <td className="p-3 border-r border-slate-400/20 font-sans">
+                            <div className="font-bold text-blue-800 dark:text-sky-400">{bill.lens?.type || 'Single Vision'}</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                              {bill.lens?.brand || 'Essilor'} ({bill.lens?.coating || 'HMC'})
+                            </div>
+                            {bill.lens?.warranty && (
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">W: {bill.lens.warranty}</div>
+                            )}
+                          </td>
+
+                          {/* Frame Specs */}
+                          <td className="p-3 border-r border-slate-400/20 font-sans">
+                            <div className="font-bold text-blue-800 dark:text-sky-400">{bill.frame?.brand || 'Titan'}</div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                              {bill.frame?.type || 'Full frame'}
+                            </div>
+                            {bill.frame?.warranty && (
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">W: {bill.frame.warranty}</div>
+                            )}
+                          </td>
+
+                          {/* Prescribed By / Doctor */}
+                          <td className="p-3 border-r border-slate-400/20 font-sans">
+                            <div className="font-semibold text-slate-700 dark:text-slate-300">
+                              {bill.customer?.drName ? `Dr. ${bill.customer.drName}` : '-'}
+                            </div>
+                            {bill.customer?.orderTakenBy && (
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Taken by: {bill.customer.orderTakenBy}</div>
+                            )}
+                          </td>
+
+                          {/* Advance Amount */}
+                          <td className="p-3 border-r border-slate-400/20 text-right whitespace-nowrap font-sans">
+                            <div className="font-bold text-sm text-emerald-700 dark:text-emerald-400">
+                              ₹ {Number(bill.advanceAmount || 0).toLocaleString('en-IN')}
+                            </div>
+                          </td>
+
+                          {/* Net Bill & Balance */}
+                          <td className="p-3 border-r border-slate-400/20 text-right whitespace-nowrap">
+                            <div className="text-xs font-semibold opacity-70">₹ {Number(bill.netAmount || 0).toFixed(2)}</div>
+                            <div className={`font-black text-sm mt-0.5 ${
+                              Number(bill.balanceAmount || 0) > 0 ? 'text-blue-800 dark:text-sky-400' : 'text-slate-600 dark:text-slate-300'
+                            }`}>
+                              Bal: ₹ {Number(bill.balanceAmount || 0).toFixed(2)}
+                            </div>
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {/* 1) Delivery Toggle / Modal */}
+                              {activeTab === 'pending' ? (
+                                <button
+                                  onClick={() => handleOpenDeliveryModal(bill)}
+                                  className="px-3 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                                  title="Deliver Order (Click to confirm delivery)"
+                                >
+                                  <Truck className="w-3.5 h-3.5" />
+                                  <span>Deliver</span>
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-400 font-extrabold text-xs shadow-xs flex items-center gap-1.5 select-none"
+                                  title="Order already delivered and completed (cannot submit again)"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Delivered</span>
+                                </span>
+                              )}
+
+                              {/* 2) Explicit Mark as Sent Toggle Button */}
+                              <button
+                                type="button"
+                                onClick={() => onToggleSMS && onToggleSMS(bill)}
+                                className={`px-2.5 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                                  bill.smsSent
+                                    ? 'bg-emerald-100 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200'
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
+                                title={bill.smsSent ? 'Reminder marked as Sent. Click to toggle.' : 'Click to mark reminder as Sent'}
+                              >
+                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>{bill.smsSent ? 'Sent ✓' : 'Mark Sent'}</span>
+                              </button>
+
+                              {/* 3) WhatsApp Action Button */}
+                              {bill.customer?.phone && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleSendWhatsApp(e, bill)}
+                                  className={`p-1.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                                    bill.smsSent
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                                      : 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-700 hover:text-white dark:bg-sky-500/20 dark:border-sky-500/40 dark:text-sky-400 dark:hover:bg-sky-500'
+                                  }`}
+                                  title="Send WhatsApp Reminder & Mark as Sent"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 2. MOBILE CARD VIEW (Auto-active on Mobile screens < md, or when Card view selected on Desktop) */}
+          {(viewMode === 'cards' || viewMode === 'table') && (
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 ${
+              viewMode === 'table' ? 'block md:hidden' : 'block'
+            }`}>
+              {filteredBills.map((bill) => {
+                const billId = bill._id || bill.billNo;
+                const isDelivered = bill.deliveryStatus === 'Delivered';
+                const formattedDelivDate = bill.deliveryDate 
+                  ? new Date(bill.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+                  : (bill.date ? new Date(bill.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : 'N/A');
+
+                const isOverdue = !isDelivered && bill.deliveryDate && bill.deliveryDate.substring(0, 10) < todayStr;
+
+                return (
+                  <div
+                    key={billId}
+                    className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 shadow-xl flex flex-col justify-between relative overflow-hidden group ${
+                      isDarkMode 
+                        ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
+                        : 'bg-white border-slate-200 text-slate-900'
+                    }`}
+                  >
+                    {/* Top Accent Bar */}
+                    <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                      isDelivered ? 'bg-emerald-500' : isOverdue ? 'bg-rose-500' : 'bg-blue-600'
+                    }`} />
+
+                    <div>
+                      {/* Top Row: Bill # & Status Pills */}
+                      <div className="flex items-center justify-between gap-2 mb-3 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-3 py-1 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-700 dark:text-sky-400 font-mono font-black text-xs">
+                            #{formatBillNo(bill.billNo)}
+                          </span>
+                          {bill.smsSent && (
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-400 font-extrabold text-[10px] flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" /> SENT
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {isOverdue && (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-400 font-extrabold text-[10px] flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-700 dark:text-rose-400" /> OVERDUE
+                            </span>
+                          )}
+                          {isDelivered ? (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-400 font-extrabold text-[10px] flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-700 dark:text-emerald-400" /> DELIVERED
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-800 dark:text-sky-400 font-extrabold text-[10px] flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-blue-700 dark:text-sky-400" /> PENDING
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Customer Info Box */}
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className="text-base font-black tracking-tight text-slate-900 dark:text-slate-100">
+                              {bill.customer?.name || 'Unnamed Customer'}
+                            </h3>
+                            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                              {bill.customer?.age ? `${bill.customer.age} yrs` : ''} ({bill.customer?.gender || 'N/A'})
+                            </div>
+                          </div>
+
+                          {bill.customer?.phone && (
+                            <a 
+                              href={`tel:${bill.customer.phone}`}
+                              className="px-2.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 dark:bg-sky-500/15 dark:border-sky-500/30 dark:text-sky-400 text-xs font-mono font-bold flex items-center gap-1 shrink-0 hover:bg-blue-100"
+                            >
+                              <Phone className="w-3 h-3 text-blue-700 dark:text-sky-400" />
+                              <span>{bill.customer.phone}</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Order & Prescription Specs Box */}
+                        <div className={`p-3 rounded-xl border text-xs space-y-2 ${
+                          isDarkMode ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-200'
+                        }`}>
+                          <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 font-medium">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-blue-700 dark:text-sky-400" /> Delivery Date:
+                            </span>
+                            <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">
+                              {formattedDelivDate}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 font-medium">
+                            <span>Lens Specs:</span>
+                            <span className="font-bold text-blue-900 dark:text-sky-400">
+                              {bill.lens?.type || 'Single Vision'} ({bill.lens?.brand || 'Essilor'} {bill.lens?.coating || 'HMC'})
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 font-medium">
+                            <span>Frame Specs:</span>
+                            <span className="font-bold text-blue-900 dark:text-sky-400">
+                              {bill.frame?.brand || 'Titan'} ({bill.frame?.type || 'Full frame'})
+                            </span>
+                          </div>
+
+                          {bill.customer?.drName && (
+                            <div className="flex justify-between items-center text-slate-500 dark:text-slate-400 font-medium">
+                              <span>Doctor:</span>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                Dr. {bill.customer.drName}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Financial Summary Grid */}
+                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-500/10 border border-slate-400/20 text-xs mb-3 text-center">
+                        <div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Net Bill</div>
+                          <div className="font-extrabold text-slate-900 dark:text-slate-100">
+                            ₹{Number(bill.netAmount || 0).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Advance</div>
+                          <div className="font-extrabold text-emerald-700 dark:text-emerald-400">
+                            ₹{Number(bill.advanceAmount || 0).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Balance</div>
+                          <div className={`font-black ${
+                            Number(bill.balanceAmount || 0) > 0 ? 'text-blue-800 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'
+                          }`}>
+                            ₹{Number(bill.balanceAmount || 0).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Controls */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/20">
+                      {/* Delivery Button */}
+                      {activeTab === 'pending' ? (
+                        <button
+                          onClick={() => handleOpenDeliveryModal(bill)}
+                          className="flex-1 py-2 px-3 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                          title="Deliver Order (Click to confirm delivery)"
+                        >
+                          <Truck className="w-4 h-4" />
+                          <span>Deliver</span>
+                        </button>
+                      ) : (
+                        <div
+                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-400 font-extrabold text-xs shadow-xs flex items-center justify-center gap-1.5 select-none"
+                          title="Order already delivered and completed (cannot submit again)"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          <span>Delivered</span>
+                        </div>
+                      )}
+
+                      {/* Explicit Mark Sent Button */}
+                      <button
+                        type="button"
+                        onClick={() => onToggleSMS && onToggleSMS(bill)}
+                        className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          bill.smsSent
+                            ? 'bg-emerald-100 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200'
+                            : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                        title={bill.smsSent ? 'Reminder marked as Sent. Click to toggle.' : 'Click to mark reminder as Sent'}
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>{bill.smsSent ? 'Sent ✓' : 'Mark Sent'}</span>
+                      </button>
+
+                      {/* WhatsApp Icon */}
+                      {bill.customer?.phone && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleSendWhatsApp(e, bill)}
+                          className={`p-2 rounded-xl border font-bold text-xs transition-all cursor-pointer flex items-center justify-center ${
+                            bill.smsSent
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-600 hover:text-white dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                              : 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-700 hover:text-white dark:bg-sky-500/20 dark:border-sky-500/40 dark:text-sky-400 dark:hover:bg-sky-500'
+                          }`}
+                          title="Send WhatsApp Reminder & Mark as Sent"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Delivery Settlement Modal Popup */}
+      <DeliveryModal 
+        bill={selectedBillForDelivery}
+        isOpen={isDeliveryModalOpen}
+        onClose={() => {
+          setIsDeliveryModalOpen(false);
+          setSelectedBillForDelivery(null);
+        }}
+        onConfirmDelivery={(billId, settlementData) => {
+          if (onToggleStatus) {
+            onToggleStatus(billId, settlementData);
+          }
+        }}
+        isDarkMode={isDarkMode}
+      />
+    </div>
+  );
+}
